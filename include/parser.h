@@ -4,6 +4,7 @@
 
 typedef struct {
     char **argv;  // Null-terminated array of arguments for execvp
+    char *input_file;
 } Command;
 
 typedef struct {
