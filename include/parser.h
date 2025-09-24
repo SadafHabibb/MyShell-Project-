@@ -10,11 +10,11 @@ typedef struct {
 } Command;
 
 typedef struct {
-    Command *commands;
-    int count;
+    Command *commands; // Dynamic array of Command structures
+    int count; // Number of commands in the array 
 } CommandList;
 
-CommandList *parse_input(char *line);
-void free_command_list(CommandList *cmdlist);
+CommandList *parse_input(char *line); //primary parsing function that transforms user input into a machine-readable format.
+void free_command_list(CommandList *cmdlist);  //implements a complete memory deallocation strategy for CommandList structures
 
 #endif
