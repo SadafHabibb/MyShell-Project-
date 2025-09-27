@@ -8,13 +8,17 @@
 #define MAX_TOKENS 64  // Maximum number of command arguments we can handle
 #define MAX_COMMANDS 32  // Maximum number of commands in a pipeline
 
+/*
+ * Function: parse_input
+ * Takes a line of text input from the user and breaks it into a structured format
+ */
 CommandList *parse_input(char *line) {
     // Allocate memory for a list of commands that will support multiple commands for pipes
     // This structure now handles both single commands and complex pipelines
     CommandList *cmdlist = malloc(sizeof(CommandList));
     if (!cmdlist) {
-        perror("malloc failed");
-        exit(1);
+        perror("malloc failed"); // Print an error if memory allocation fails
+        exit(1);                 // Exit the program because we cannot continue
     }
 
     // Initialize command count to 1 (will be incremented when pipes are found)
@@ -26,7 +30,7 @@ CommandList *parse_input(char *line) {
     // Start with space for MAX_COMMANDS to handle complex pipelines
     cmdlist->commands = malloc(MAX_COMMANDS * sizeof(Command));
     if (!cmdlist->commands) {
-        perror("malloc failed");
+        perror("malloc failed"); // Print an error if memory allocation fails
         exit(1);
     }
 
@@ -130,7 +134,7 @@ CommandList *parse_input(char *line) {
         if (strcmp(token, "<") == 0) {
             // Get the filename for input redirection
             token = strtok(NULL, " \t\n");
-            if (!token) {
+            if (!token) { // If no file is provided, print an error
                 fprintf(stderr, "Error: Missing input file after '<'\n");
                 free_command_list(cmdlist);
                 return NULL;
@@ -195,7 +199,7 @@ CommandList *parse_input(char *line) {
 // The existing implementation correctly iterates through cmdlist->count commands
 // and frees all allocated memory for each command including redirection filenames
 void free_command_list(CommandList *cmdlist) {
-    if (!cmdlist) return;
+    if (!cmdlist) return; // Nothing to free
 
     // Iterate through all commands in the list (now supports multiple commands)
     for (int c = 0; c < cmdlist->count; c++) {
@@ -205,6 +209,8 @@ void free_command_list(CommandList *cmdlist) {
         for (int i = 0; cmd.argv[i] != NULL; i++) {
             free(cmd.argv[i]);
         }
+
+        // Free the arguments array itself
         free(cmd.argv);
 
         // Free redirection filenames if they were allocated
@@ -215,5 +221,7 @@ void free_command_list(CommandList *cmdlist) {
 
     // Free the commands array and the CommandList structure
     free(cmdlist->commands);
+
+    // Finally, free the CommandList struct
     free(cmdlist);
 }
