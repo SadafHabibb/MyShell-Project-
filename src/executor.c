@@ -29,8 +29,7 @@ void execute_commands(CommandList *cmdlist) {
                 int fd = open(cmd->input_file, O_RDONLY);
                 if (fd == -1) {
                     perror("Input file not found");
-                    exit(1);
-                }
+                    exit(1);}
                 dup2(fd, STDIN_FILENO);
                 close(fd);
             }
@@ -40,19 +39,17 @@ void execute_commands(CommandList *cmdlist) {
                 int fd = open(cmd->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd == -1) {
                     perror("Output file");
-                    exit(1);
-                }
+                    exit(1);}
                 dup2(fd, STDOUT_FILENO);
                 close(fd);
-            }
+            } 
 
             // Error redirection: redirect stderr to file if specified
             if (cmd->error_file != NULL) {
                 int fd = open(cmd->error_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd == -1) {
                     perror("Error file");
-                    exit(1);
-                }
+                    exit(1);}
                 dup2(fd, STDERR_FILENO);
                 close(fd);
             }
@@ -106,59 +103,34 @@ void execute_commands(CommandList *cmdlist) {
             // Set up input for this command in the pipeline
             // First command: may read from input file or stdin
             // Middle/last commands: read from previous pipe
-            if (c == 0) {
-                // First command in pipeline: handle input redirection if specified
-                // If no input redirection, reads from original stdin (keyboard)
-                if (cmd->input_file != NULL) {
-                    int fd = open(cmd->input_file, O_RDONLY);
-                    if (fd == -1) {
-                        perror("Input file not found");
-                        exit(1);
-                    }
-                    dup2(fd, STDIN_FILENO);
-                    close(fd);
-                }
-                // No else clause needed - if no input redirection, use original stdin
-            } else {
-                // Middle or last command: read from the previous pipe
-                // Connect stdin to the read end of the previous pipe
+            if (cmd->input_file) {
+                int fd = open(cmd->input_file, O_RDONLY);
+                if (fd == -1) { perror("Input file"); exit(1); }
+                dup2(fd, STDIN_FILENO); close(fd);
+            } else if (c > 0) {
                 dup2(pipes[c-1][0], STDIN_FILENO);
             }
 
             // Set up output for this command in the pipeline
             // Last command: may write to output file or stdout
             // First/middle commands: write to next pipe
-            if (c == cmdlist->count - 1) {
-                // Last command in pipeline: handle output redirection if specified
-                // If no output redirection, writes to original stdout (screen)
-                if (cmd->output_file != NULL) {
-                    int fd = open(cmd->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd == -1) {
-                        perror("Output file");
-                        exit(1);
-                    }
-                    dup2(fd, STDOUT_FILENO);
-                    close(fd);
-                }
-                // No else clause needed - if no output redirection, use original stdout
-            } else {
-                // First or middle command: write to the next pipe
-                // Connect stdout to the write end of the current pipe
+            if (cmd->output_file) {
+                int fd = open(cmd->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd == -1) { perror("Output file"); exit(1); }
+                dup2(fd, STDOUT_FILENO); close(fd);
+            } else if (c < cmdlist->count - 1) {
                 dup2(pipes[c][1], STDOUT_FILENO);
             }
 
             // Handle error redirection for any command in the pipeline
             // Error redirection can be applied to any command independently of pipes
             // This allows capturing errors from specific commands in the pipeline
-            if (cmd->error_file != NULL) {
+            if (cmd->error_file) {
                 int fd = open(cmd->error_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                if (fd == -1) {
-                    perror("Error file");
-                    exit(1);
-                }
-                dup2(fd, STDERR_FILENO);
-                close(fd);
+                if (fd == -1) { perror("Error file"); exit(1); }
+                dup2(fd, STDERR_FILENO); close(fd);
             }
+
 
             // Close all pipe file descriptors in the child process
             // After dup2 operations, the original pipe file descriptors are not needed
@@ -176,6 +148,7 @@ void execute_commands(CommandList *cmdlist) {
             exit(1);
         }
     }
+
 
     // Parent process: close all pipe file descriptors and wait for all children
     // The parent must close pipe descriptors to allow proper pipeline termination

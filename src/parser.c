@@ -8,6 +8,18 @@
 #define MAX_TOKENS 64  // Maximum number of command arguments we can handle
 #define MAX_COMMANDS 32  // Maximum number of commands in a pipeline
 
+// Remove surrounding single or double quotes from a token
+char *strip_quotes(char *token) {
+    size_t len = strlen(token);
+    if (len >= 2 && 
+        ((token[0] == '"' && token[len-1] == '"') ||
+         (token[0] == '\'' && token[len-1] == '\''))) {
+        token[len-1] = '\0';
+        token++;
+    }
+    return token;
+}
+
 /*
  * Function: parse_input
  * Takes a line of text input from the user and breaks it into a structured format
@@ -159,20 +171,20 @@ CommandList *parse_input(char *line) {
             cmd->output_file = strdup(token);
             
         } else if (strcmp(token, "2>") == 0) {
-            // Handle error redirection operator
-            // Error redirection can be valid on any command in a pipeline
             token = strtok(NULL, " \t\n");
             if (!token) {
                 fprintf(stderr, "Error: Missing error file after '2>'\n");
                 free_command_list(cmdlist);
                 return NULL;
             }
+            // Determine which command to attach error redirection to
+            // If we are in the middle of a command (i > 0), attach to current command
+            // Otherwise, attach to the previous command if it exists
             cmd->error_file = strdup(token);
-            
         } else {
             // Regular command argument - add to current command's argv array
             // This includes the command name (first argument) and all command options
-            cmd->argv[i++] = strdup(token);
+            cmd->argv[i++] = strdup(strip_quotes(token));
         }
         
         // Get next token for continued parsing

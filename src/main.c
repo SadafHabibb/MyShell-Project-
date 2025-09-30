@@ -5,8 +5,7 @@
 #include "executor.h"
 
 int main() {
-    char *line = NULL;
-    size_t len = 0;
+    char line[1024];
 
     while (1) {
         // Print clean shell prompt
@@ -14,33 +13,35 @@ int main() {
         fflush(stdout);
 
         // Read a line from stdin
-        if (getline(&line, &len, stdin) == -1) {
+        if (!fgets(line, sizeof(line), stdin)) {
             printf("\n");  // handle Ctrl+D
             break;
         }
 
         // Remove trailing newline
-        line[strcspn(line, "\n")] = 0;
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
 
         // Skip empty lines
         if (line[0] == '\0') continue;
 
         // Built-in exit
         if (strcmp(line, "exit") == 0) {
-            break;  // exit the shell loop
+            break;
         }
 
         // Parse input line into commands
         CommandList *cmdlist = parse_input(line);
-        if (cmdlist == NULL) continue;  // empty or invalid input
+        if (cmdlist == NULL) continue;
 
         // Execute parsed commands
         execute_commands(cmdlist);
 
-        // Free allocated memory for commands
+        // Free allocated memory
         free_command_list(cmdlist);
     }
 
-    free(line);
     return 0;
 }
