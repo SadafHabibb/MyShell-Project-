@@ -3,15 +3,15 @@
 #define PARSER_H
 
 typedef struct {
-    char **argv;        // Command arguments
-    char *input_file;   // For input redirection: <
-    char *output_file;  // For output redirection: >
-    char *error_file;   // For error redirection: 2>
+    char **argv;        //command arguments
+    char *input_file;   //for input redirection: <
+    char *output_file;  //for output redirection: >
+    char *error_file;   //for error redirection: 2>
 } Command;
 
 typedef struct {
-    Command *commands; // Dynamic array of Command structures
-    int count; // Number of commands in the array 
+    Command *commands; //dynamic array of Command structures
+    int count; //number of commands in the array 
 } CommandList;
 
 CommandList *parse_input(char *line); //primary parsing function that transforms user input into a machine-readable format.
