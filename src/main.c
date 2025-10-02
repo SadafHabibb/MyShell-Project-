@@ -8,38 +8,38 @@ int main() {
     char line[1024];
 
     while (1) {
-        // Print clean shell prompt
+        //print clean shell prompt
         printf("$ ");
         fflush(stdout);
 
-        // Read a line from stdin
+        //read a line from stdin
         if (!fgets(line, sizeof(line), stdin)) {
-            printf("\n");  // handle Ctrl+D
+            printf("\n");  //handle Ctrl+D
             break;
         }
 
-        // Remove trailing newline
+        //remove trailing newline
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') {
             line[len - 1] = '\0';
         }
 
-        // Skip empty lines
+        //skip empty lines
         if (line[0] == '\0') continue;
 
-        // Built-in exit
+        //built-in exit
         if (strcmp(line, "exit") == 0) {
             break;
         }
 
-        // Parse input line into commands
+        //parse input line into commands
         CommandList *cmdlist = parse_input(line);
         if (cmdlist == NULL) continue;
 
-        // Execute parsed commands
+        //execute parsed commands
         execute_commands(cmdlist);
 
-        // Free allocated memory
+        //free allocated memory
         free_command_list(cmdlist);
     }
 
