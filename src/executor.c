@@ -1,5 +1,7 @@
 // src/executor.c
 #include <stdio.h>
+#include <string.h> 
+#include "parser.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -22,6 +24,23 @@ void execute_commands(CommandList *cmdlist) {
         } else if (pid == 0) {
             //child process for single command
             Command *cmd = &cmdlist->commands[0];
+
+            if (strcmp(cmd->argv[0], "echo") == 0) {
+                int saved_stdout = dup(STDOUT_FILENO);
+                if (cmd->output_file) {
+                    int fd = open(cmd->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fd == -1) { perror("Output file"); return; }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+                builtin_echo(cmd->argv);
+                if (cmd->output_file) {
+                    dup2(saved_stdout, STDOUT_FILENO);
+                    close(saved_stdout);
+                }
+                return; // skip execvp for built-in
+            }
+
 
             //apply all redirection using existing proven code
             //input redirection: redirect stdin from file if specified

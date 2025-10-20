@@ -17,4 +17,7 @@ typedef struct {
 CommandList *parse_input(char *line); //primary parsing function that transforms user input into a machine-readable format.
 void free_command_list(CommandList *cmdlist);  //implements a complete memory deallocation strategy for CommandList structures
 
+//Add this declaration for builtin echo
+void builtin_echo(char **argv);
+
 #endif

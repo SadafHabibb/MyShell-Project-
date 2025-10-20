@@ -1,12 +1,52 @@
-
 // src/parser.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include <glob.h>
 #include "parser.h"
 
 #define MAX_TOKENS 64  //maximum number of command arguments we can handle
 #define MAX_COMMANDS 32  //maximum number of commands in a pipeline
+
+
+void builtin_echo(char **argv) {
+    int interpret_escapes = 0;
+    int i = 1;
+
+    // check for -e
+    if (argv[1] && strcmp(argv[1], "-e") == 0) {
+        interpret_escapes = 1;
+        i = 2;
+    }
+
+    for (; argv[i]; i++) {
+        char *s = argv[i];
+        if (interpret_escapes) {
+            for (int j = 0; s[j]; j++) {
+                if (s[j] == '\\') {
+                    j++;
+                    switch (s[j]) {
+                        case 'n': putchar('\n'); break;
+                        case 't': putchar('\t'); break;
+                        case '\\': putchar('\\'); break;
+                        case '"': putchar('"'); break;
+                        case '\'': putchar('\''); break;
+                        case '\0': j--; break;
+                        default: putchar('\\'); putchar(s[j]); break;
+                    }
+                } else {
+                    putchar(s[j]);
+                }
+            }
+        } else {
+            fputs(s, stdout);
+        }
+
+        if (argv[i + 1]) putchar(' ');
+    }
+    putchar('\n');
+}
 
 //helper function to remove surrounding single or double quotes from a token
 char *strip_quotes(char *token) {
@@ -19,6 +59,7 @@ char *strip_quotes(char *token) {
     }
     return token;
 }
+
 //takes a line of text input from the user and breaks it into a structured format
 CommandList *parse_input(char *line) {
     //allocate memory for a list of commands that will support multiple commands for pipes
@@ -67,139 +108,109 @@ CommandList *parse_input(char *line) {
     //this will be incremented each time a pipe symbol is encountered
     int current_command = 0;
     
-    //begin tokenization of the input string
-    //strtok() splits the input by whitespace delimiters
-    char *token = strtok(line, " \t\n");
+    //pointer to traverse the input line manually for quote-aware tokenization
+    char *p = line;
 
     //main parsing loop: process each token until end of input or token limit reached
-    //this loop now handles both regular arguments/redirections AND pipe symbols
-    while (token != NULL && i < MAX_TOKENS - 1) {
-        
-        //check if current token is a pipe symbol indicating command separation
-        //pipes connect stdout of previous command to stdin of next command
-        if (strcmp(token, "|") == 0) {
-            //pipe symbol found - need to start a new command in the pipeline
-            
-            //first, validate that the current command has at least one argument
-            //an empty command before a pipe is a syntax error
+    while (*p && i < MAX_TOKENS - 1) {
+        //skip leading whitespace
+        while (*p && isspace(*p)) p++;
+        if (!*p) break;
+
+        //check for pipe
+        if (*p == '|') {
             if (i == 0) {
                 fprintf(stderr, "Error: Empty command before pipe\n");
                 free_command_list(cmdlist);
                 return NULL;
             }
-            
-            //null-terminate the current command's argv array
-            //this completes the argument list for the current command
             cmd->argv[i] = NULL;
-            
-            //increment the total command count to include the new command after the pipe
             cmdlist->count++;
-            
-            //check if we've exceeded the maximum number of commands in a pipeline
             if (cmdlist->count > MAX_COMMANDS) {
                 fprintf(stderr, "Error: Too many commands in pipeline (maximum %d)\n", MAX_COMMANDS);
                 free_command_list(cmdlist);
                 return NULL;
             }
-            
-            //move to the next command in the pipeline
             current_command++;
             cmd = &cmdlist->commands[current_command];
-            
-            //allocate memory for the new command's argument vector
             cmd->argv = malloc(MAX_TOKENS * sizeof(char *));
-            if (!cmd->argv) {
-                perror("malloc failed");
-                exit(1);
-            }
-            
-            //initialize redirection fields for the new command
-            //middle commands in a pipeline typically don't have file redirection
-            //but we initialize them for safety and potential future use
-            cmd->input_file = NULL;
-            cmd->output_file = NULL;
-            cmd->error_file = NULL;
-            
-            //reset argument index for the new command
+            if (!cmd->argv) { perror("malloc failed"); exit(1); }
+            cmd->input_file = cmd->output_file = cmd->error_file = NULL;
             i = 0;
-            
-            //get next token to start parsing the new command
-            token = strtok(NULL, " \t\n");
-            
-            //check if there's a command after the pipe symbol
-            if (token == NULL) {
-                fprintf(stderr, "Error: Missing command after pipe\n");
-                free_command_list(cmdlist);
-                return NULL;
-            }
-            
-            //continue to process the first token of the new command
-            //(don't skip to next iteration, process this token normally)
+            p++; // skip the pipe
+            continue;
         }
-        
-        //handle input redirection operator
-        //input redirection is typically only valid on the first command in a pipeline
-        if (strcmp(token, "<") == 0) {
-            //get the filename for input redirection
-            token = strtok(NULL, " \t\n");
-            if (!token) { //if no file is provided, print an error
-                fprintf(stderr, "Error: Missing input file after '<'\n");
-                free_command_list(cmdlist);
-                return NULL;
+
+        //handle input/output/error redirection
+        if (strncmp(p, "<", 1) == 0) {
+            p++;
+            while (*p && isspace(*p)) p++;
+            if (!*p) { fprintf(stderr, "Error: Missing input file after '<'\n"); free_command_list(cmdlist); return NULL; }
+            char buffer[1024];
+            int j = 0;
+            while (*p && !isspace(*p)) buffer[j++] = *p++;
+            buffer[j] = '\0';
+            cmd->input_file = strdup(buffer);
+            continue;
+        } else if (strncmp(p, ">", 1) == 0) {
+            p++;
+            while (*p && isspace(*p)) p++;
+            if (!*p) { fprintf(stderr, "Error: Missing output file after '>'\n"); free_command_list(cmdlist); return NULL; }
+            char buffer[1024];
+            int j = 0;
+            while (*p && !isspace(*p)) buffer[j++] = *p++;
+            buffer[j] = '\0';
+            cmd->output_file = strdup(buffer);
+            continue;
+        } else if (strncmp(p, "2>", 2) == 0) {
+            p += 2;
+            while (*p && isspace(*p)) p++;
+            if (!*p) { fprintf(stderr, "Error: Missing error file after '2>'\n"); free_command_list(cmdlist); return NULL; }
+            char buffer[1024];
+            int j = 0;
+            while (*p && !isspace(*p)) buffer[j++] = *p++;
+            buffer[j] = '\0';
+            cmd->error_file = strdup(buffer);
+            continue;
+        }
+
+        //parse a normal argument, handling quotes and concatenation
+        char buffer[1024];
+        int j = 0;
+        while (*p && !isspace(*p) && *p != '|') {
+            if (*p == '"' || *p == '\'') {
+                char quote = *p++;
+                while (*p && *p != quote) {
+                    buffer[j++] = *p++;
+                }
+                if (*p == quote) p++;
+            } else {
+                buffer[j++] = *p++;
             }
-            
-            //warn if input redirection is used on non-first command (may be valid in complex cases)
-            if (current_command > 0) {
-                fprintf(stderr, "Warning: Input redirection on command %d in pipeline\n", current_command + 1);
-            }
-            
-            cmd->input_file = strdup(token);
-            
-        } else if (strcmp(token, ">") == 0) {
-            //handle output redirection operator
-            //output redirection is typically only valid on the last command in a pipeline
-            token = strtok(NULL, " \t\n");
-            if (!token) {
-                fprintf(stderr, "Error: Missing output file after '>'\n");
-                free_command_list(cmdlist);
-                return NULL;
-            }
-            cmd->output_file = strdup(token);
-            
-        } else if (strcmp(token, "2>") == 0) {
-            token = strtok(NULL, " \t\n");
-            if (!token) {
-                fprintf(stderr, "Error: Missing error file after '2>'\n");
-                free_command_list(cmdlist);
-                return NULL;
-            }
-            //determine which command to attach error redirection to
-            //if we are in the middle of a command (i > 0), attach to current command
-            //otherwise, attach to the previous command if it exists
-            cmd->error_file = strdup(token);
+        }
+        buffer[j] = '\0';
+        if (j == 0) continue;
+
+        //handle globbing
+        glob_t results;
+        int glob_flags = 0;
+        if (glob(buffer, glob_flags, NULL, &results) == 0) {
+            for (size_t k = 0; k < results.gl_pathc && i < MAX_TOKENS - 1; k++)
+                cmd->argv[i++] = strdup(results.gl_pathv[k]);
+            globfree(&results);
         } else {
-            //regular command argument - add to current command's argv array
-            //this includes the command name (first argument) and all command options
-            cmd->argv[i++] = strdup(strip_quotes(token));
+            cmd->argv[i++] = strdup(buffer);
         }
-        
-        //get next token for continued parsing
-        token = strtok(NULL, " \t\n");
     }
-    
-    //after parsing all tokens, validate that we have at least one argument in the final command
-    //this catches cases like "command1 | " where there's a trailing pipe with no command
+
+    //null-terminate last command's argv
     if (i == 0) {
         fprintf(stderr, "Error: Empty command at end of pipeline\n");
         free_command_list(cmdlist);
         return NULL;
     }
-
-    //null-terminate the final command's argv array
-    //this completes the argument list for the last command in the pipeline
     cmd->argv[i] = NULL;
-    
-    //return the completed CommandList with all parsed commands and their redirection settings
+
     return cmdlist;
 }
 
