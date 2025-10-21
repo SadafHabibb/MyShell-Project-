@@ -29,7 +29,10 @@ void execute_commands(CommandList *cmdlist) {
                 int saved_stdout = dup(STDOUT_FILENO);
                 if (cmd->output_file) {
                     int fd = open(cmd->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (fd == -1) { perror("Output file"); return; }
+                    if (fd == -1) { 
+                        perror("Output file"); 
+                        exit(1);  // ✓ Exit child process properly
+                    }
                     dup2(fd, STDOUT_FILENO);
                     close(fd);
                 }
@@ -38,7 +41,7 @@ void execute_commands(CommandList *cmdlist) {
                     dup2(saved_stdout, STDOUT_FILENO);
                     close(saved_stdout);
                 }
-                return; // skip execvp for built-in
+                exit(0); // skip execvp for built-in
             }
 
 
