@@ -35,11 +35,67 @@ void log_message(const char *color, const char *tag, const char *message) {
  * 4. In parent: read from pipe into buffer
  */
 int execute_and_capture(const char *command, char *output_buffer, size_t buffer_size) {
+    // Check if command has output or error redirection (>, 2>)
+    // These commands should execute normally without output capture
+    // because the redirection itself will handle the output
+    int has_output_redirect = (strstr(command, ">") != NULL);
+    
+    // Parse the command first to check for redirections
+    char command_copy[BUFFER_SIZE];
+    strncpy(command_copy, command, BUFFER_SIZE - 1);
+    command_copy[BUFFER_SIZE - 1] = '\0';
+    
+    CommandList *cmdlist = parse_input(command_copy);
+    if (cmdlist == NULL) {
+        snprintf(output_buffer, buffer_size, "Command parsing failed\n");
+        return -1;
+    }
+    
+    // Check if any command in the list has output or error redirection
+    int needs_capture = 1;  // Default: capture output
+    for (int i = 0; i < cmdlist->count; i++) {
+        if (cmdlist->commands[i].output_file != NULL || 
+            cmdlist->commands[i].error_file != NULL) {
+            needs_capture = 0;  // Don't capture if redirecting to file
+            break;
+        }
+    }
+    
+    // If command redirects output to file, execute without capturing
+    // The file will contain the output, so we just confirm execution
+    if (!needs_capture) {
+        pid_t pid = fork();
+        
+        if (pid < 0) {
+            free_command_list(cmdlist);
+            snprintf(output_buffer, buffer_size, "Fork failed\n");
+            return -1;
+        } else if (pid == 0) {
+            // Child: execute command normally (output goes to file)
+            execute_commands(cmdlist);
+            free_command_list(cmdlist);
+            exit(0);
+        } else {
+            // Parent: wait and send confirmation message
+            int status;
+            waitpid(pid, &status, 0);
+            free_command_list(cmdlist);
+            
+            if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+                snprintf(output_buffer, buffer_size, "Command executed successfully\n");
+            } else {
+                snprintf(output_buffer, buffer_size, "Command failed\n");
+            }
+            return 0;
+        }
+    }
+    
+    // Standard output capture path (for commands without file redirection)
     // Create a pipe for capturing command output
-    // pipe_fd[0] is read end, pipe_fd[1] is write end
     int pipe_fd[2];
     if (pipe(pipe_fd) == -1) {
         perror("Pipe creation failed");
+        free_command_list(cmdlist);
         return -1;
     }
 
@@ -51,6 +107,7 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         perror("Fork failed");
         close(pipe_fd[0]);
         close(pipe_fd[1]);
+        free_command_list(cmdlist);
         return -1;
         
     } else if (pid == 0) {
@@ -64,20 +121,6 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         dup2(pipe_fd[1], STDOUT_FILENO);
         dup2(pipe_fd[1], STDERR_FILENO);
         close(pipe_fd[1]);  // Close original fd after duplication
-        
-        // Parse the command using Phase 1 parser
-        // Create a mutable copy of the command string since parse_input may modify it
-        char command_copy[BUFFER_SIZE];
-        strncpy(command_copy, command, BUFFER_SIZE - 1);
-        command_copy[BUFFER_SIZE - 1] = '\0';
-        
-        CommandList *cmdlist = parse_input(command_copy);
-        
-        if (cmdlist == NULL) {
-            // Parsing failed - print error and exit child
-            fprintf(stderr, "Command parsing failed\n");
-            exit(1);
-        }
         
         // Execute the parsed command(s) using Phase 1 executor
         // Output will be captured through the redirected stdout/stderr
@@ -118,6 +161,9 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         // Wait for child process to complete
         int status;
         waitpid(pid, &status, 0);
+        
+        // Free the command list
+        free_command_list(cmdlist);
         
         // Check if command execution was successful
         if (WIFEXITED(status)) {
