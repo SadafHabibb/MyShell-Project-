@@ -1,1 +1,8 @@
-hello
+client
+include
+makefile
+myshell
+myshell.dSYM
+output.txt
+server
+src

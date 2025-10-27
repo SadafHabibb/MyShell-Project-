@@ -3,10 +3,10 @@
 
 #include <stddef.h>
 
-// Client configuration constants
+//client configuration constants
 #define SERVER_PORT 8080
-#define SERVER_IP "127.0.0.1"   // Localhost, change if server is remote
-#define CLIENT_BUFFER_SIZE 4096 // Maximum size for sending/receiving commands
+#define SERVER_IP "127.0.0.1"   //localhost, change if server is remote
+#define CLIENT_BUFFER_SIZE 4096 //maximum size for sending/receiving commands
 
 /**
  * Starts the client program
