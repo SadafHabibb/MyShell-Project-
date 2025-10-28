@@ -1,45 +1,45 @@
-# Makefile for MyShell Phase 2 - Universal Binary (Intel + M1)
+# Makefile for MyShell Phase 2 
 CC = gcc
 CFLAGS = -Wall -g -Iinclude -arch x86_64 -arch arm64
 
-# Source files
+#source files
 MAIN_SRC    = src/main.c
 PARSER_SRC  = src/parser.c
 EXECUTOR_SRC= src/executor.c
 SERVER_SRC  = src/server.c
 CLIENT_SRC  = src/client.c
 
-# Object files
+#object files
 MAIN_OBJ    = src/main.o
 PARSER_OBJ  = src/parser.o
 EXECUTOR_OBJ= src/executor.o
 SERVER_OBJ  = src/server.o
 CLIENT_OBJ  = src/client.o
 
-# Targets
+#targets
 MYSHELL_TARGET = myshell
 SERVER_TARGET  = server
 CLIENT_TARGET  = client
 
-# Default target: build everything
+#default target: build everything
 all: $(MYSHELL_TARGET) $(SERVER_TARGET) $(CLIENT_TARGET)
 
-# Build myshell executable
+#build myshell executable
 $(MYSHELL_TARGET): $(MAIN_OBJ) $(PARSER_OBJ) $(EXECUTOR_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 	@echo "myshell compiled successfully! Run with: ./myshell"
 
-# Build server executable
+#build server executable
 $(SERVER_TARGET): $(SERVER_OBJ) $(PARSER_OBJ) $(EXECUTOR_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 	@echo "Server compiled successfully! Run with: ./server"
 
-# Build client executable
+#build client executable
 $(CLIENT_TARGET): $(CLIENT_OBJ) $(PARSER_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 	@echo "Client compiled successfully! Run with: ./client"
 
-# Compile source files
+#compile source files
 $(MAIN_OBJ): $(MAIN_SRC) include/parser.h include/executor.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -55,15 +55,15 @@ $(PARSER_OBJ): $(PARSER_SRC) include/parser.h
 $(EXECUTOR_OBJ): $(EXECUTOR_SRC) include/executor.h include/parser.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean build artifacts
+#clean build artifacts
 clean:
 	rm -f $(MAIN_OBJ) $(SERVER_OBJ) $(CLIENT_OBJ) $(PARSER_OBJ) $(EXECUTOR_OBJ) $(MYSHELL_TARGET) $(SERVER_TARGET) $(CLIENT_TARGET)
 	@echo "Cleaned build files"
 
-# Rebuild everything from scratch
+#rebuild everything from scratch
 rebuild: clean all
 
-# Help target
+#help target
 help:
 	@echo "MyShell Phase 2 - Universal Makefile"
 	@echo ""
