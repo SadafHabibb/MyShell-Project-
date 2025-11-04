@@ -36,7 +36,7 @@ $(TARGET_CLIENT): $(OBJ_CLIENT)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean build artifacts
+#clean build artifacts
 clean:
 	rm -f $(OBJ_MAIN) $(OBJ_SERVER) $(OBJ_CLIENT) $(TARGET_SHELL) $(TARGET_SERVER) $(TARGET_CLIENT)
 
