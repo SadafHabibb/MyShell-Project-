@@ -3,7 +3,9 @@
 #include <string.h>     
 #include <unistd.h>    
 #include <arpa/inet.h> 
-#include "client.h"     
+#include <sys/select.h>
+#include <errno.h>
+#include "../include/client.h"
 
 //function to start the client and manage communication with the server
 void start_client() {
@@ -61,9 +63,23 @@ void start_client() {
             send_buffer[len - 1] = '\0';
         }
 
+        //skip empty commands
+        if (strlen(send_buffer) == 0) {
+            continue;
+        }
+
         //if the user types "exit", close connection gracefully
         if (strcmp(send_buffer, "exit") == 0) {
             send(sock, send_buffer, strlen(send_buffer), 0);  //notify server
+            
+            //wait for server's goodbye message
+            memset(recv_buffer, 0, CLIENT_BUFFER_SIZE);
+            bytes_received = recv(sock, recv_buffer, CLIENT_BUFFER_SIZE - 1, 0);
+            if (bytes_received > 0) {
+                recv_buffer[bytes_received] = '\0';
+                printf("%s", recv_buffer);
+            }
+            
             printf("Exiting client.\n");
             break;
         }
@@ -75,16 +91,45 @@ void start_client() {
         }
 
         //receive response from server
-        memset(recv_buffer, 0, CLIENT_BUFFER_SIZE);  //clear buffer
-        bytes_received = recv(sock, recv_buffer, CLIENT_BUFFER_SIZE - 1, 0);  //read response
-        if (bytes_received <= 0) {  //if server closed connection or error occurred
-            printf("Server disconnected.\n");
+        //FIXED: Clear buffer and use a loop to ensure we get all data
+        memset(recv_buffer, 0, CLIENT_BUFFER_SIZE);
+        
+        //set a timeout for receiving data
+        struct timeval timeout;
+        timeout.tv_sec = 5;  // 5 second timeout
+        timeout.tv_usec = 0;
+        
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(sock, &read_fds);
+        
+        //wait for data to be available
+        int select_result = select(sock + 1, &read_fds, NULL, NULL, &timeout);
+        
+        if (select_result < 0) {
+            perror("Select failed");
+            break;
+        } else if (select_result == 0) {
+            printf("Server response timeout.\n");
+            continue;
+        }
+        
+        //receive data from server
+        bytes_received = recv(sock, recv_buffer, CLIENT_BUFFER_SIZE - 1, 0);
+        
+        if (bytes_received <= 0) {
+            //if server closed connection or error occurred
+            if (bytes_received == 0) {
+                printf("Server disconnected.\n");
+            } else {
+                perror("Receive failed");
+            }
             break;
         }
 
         //null-terminate received data before printing
         recv_buffer[bytes_received] = '\0';
-        printf("%s", recv_buffer);  //print server response
+        printf("%s", recv_buffer);
 
         //ensure clean output formatting
         if (bytes_received > 0 && recv_buffer[bytes_received - 1] != '\n') {

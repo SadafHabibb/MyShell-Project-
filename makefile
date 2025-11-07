@@ -1,3 +1,4 @@
+# Compiler and flags
 CC = gcc
 CFLAGS = -Wall -g -Iinclude -pthread
 LDFLAGS = -pthread
@@ -17,7 +18,7 @@ TARGET_SHELL = myshell
 TARGET_SERVER = server
 TARGET_CLIENT = client
 
-# Build all targets
+# Default target: build all executables
 all: $(TARGET_SHELL) $(TARGET_SERVER) $(TARGET_CLIENT)
 
 # Build Phase 1 shell
@@ -32,13 +33,15 @@ $(TARGET_SERVER): $(OBJ_SERVER)
 $(TARGET_CLIENT): $(OBJ_CLIENT)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# Compile source files to object files
+# Compile each .c file into a .o file
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-#clean build artifacts
+# Clean build artifacts
 clean:
-	rm -f $(OBJ_MAIN) $(OBJ_SERVER) $(OBJ_CLIENT) $(TARGET_SHELL) $(TARGET_SERVER) $(TARGET_CLIENT)
+	rm -f $(OBJ_MAIN) $(OBJ_SERVER) $(OBJ_CLIENT) \
+	       $(TARGET_SHELL) $(TARGET_SERVER) $(TARGET_CLIENT)
 
-# Phony targets
+# Declare phony targets
 .PHONY: all clean
+
