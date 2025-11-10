@@ -413,74 +413,19 @@ void log_message(const char *color, const char *tag, const char *message) {
  * strategy:
  * 1. create a pipe to capture output
  * 2. fork a child process
- * 3. in child: redirect stdout/stderr to pipe, execute command
+ * 3. in child: redirect stdout/stderr to pipe, parse+execute command
  * 4. in parent: read from pipe into buffer
  */
 int execute_and_capture(const char *command, char *output_buffer, size_t buffer_size) {
-    // check if command has output or error redirection (>, 2>)
-    // these commands should execute normally without output capture
-    // because the redirection itself will handle the output
-    
-    // parse the command first to check for redirections
-    char command_copy[BUFFER_SIZE];
-    strncpy(command_copy, command, BUFFER_SIZE - 1);
-    command_copy[BUFFER_SIZE - 1] = '\0';
-    
-    CommandList *cmdlist = parse_input(command_copy);
-    if (cmdlist == NULL) {
-        snprintf(output_buffer, buffer_size, "Command parsing failed\n");
-        return -1;
-    }
-    
-    // check if any command in the list has output or error redirection
-    int needs_capture = 1;  // default: capture output
-    for (int i = 0; i < cmdlist->count; i++) {
-        if (cmdlist->commands[i].output_file != NULL || 
-            cmdlist->commands[i].error_file != NULL) {
-            needs_capture = 0;  // don't capture if redirecting to file
-            break;
-        }
-    }
-    
-    // if command redirects output to file, execute without capturing
-    // the file will contain the output, so we just confirm execution
-    if (!needs_capture) {
-        pid_t pid = fork();
-        
-        if (pid < 0) {
-            free_command_list(cmdlist);
-            snprintf(output_buffer, buffer_size, "Fork failed\n");
-            return -1;
-        } else if (pid == 0) {
-            // child: execute command normally (output goes to file)
-            execute_commands(cmdlist);
-            free_command_list(cmdlist);
-            exit(0);
-        } else {
-            // parent: wait and send confirmation message
-            int status;
-            waitpid(pid, &status, 0);
-            free_command_list(cmdlist);
-            
-            if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
-                snprintf(output_buffer, buffer_size, "Command executed successfully\n");
-            } else {
-                snprintf(output_buffer, buffer_size, "Command failed\n");
-            }
-            return 0;
-        }
-    }
-    
-    // standard output capture path (for commands without file redirection)
+    // always capture: executor-level redirections (> and 2>) will override as needed
     // create a pipe for capturing command output
     int pipe_fd[2];
     if (pipe(pipe_fd) == -1) {
         perror("Pipe creation failed");
-        free_command_list(cmdlist);
         return -1;
     }
 
-    // fork a child process to execute the command
+    // fork a child process to parse and execute the command
     pid_t pid = fork();
     
     if (pid < 0) {
@@ -488,11 +433,10 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         perror("Fork failed");
         close(pipe_fd[0]);
         close(pipe_fd[1]);
-        free_command_list(cmdlist);
         return -1;
         
     } else if (pid == 0) {
-        // child process: execute the command with output redirected to pipe
+        // child process: redirect output to pipe, then parse and execute
         
         // close read end of pipe in child (we only write)
         close(pipe_fd[0]);
@@ -503,12 +447,20 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         dup2(pipe_fd[1], STDERR_FILENO);
         close(pipe_fd[1]);
         
-        // execute the parsed command(s) using Phase 1 executor
-        execute_commands(cmdlist);
+        // parse and execute within the child so parser errors are captured too
+        char command_copy[BUFFER_SIZE];
+        strncpy(command_copy, command, BUFFER_SIZE - 1);
+        command_copy[BUFFER_SIZE - 1] = '\0';
+
+        CommandList *cmdlist_child = parse_input(command_copy);
+        if (cmdlist_child != NULL) {
+            execute_commands(cmdlist_child);
+            free_command_list(cmdlist_child);
+            exit(0);
+        }
         
-        // clean up and exit child process
-        free_command_list(cmdlist);
-        exit(0);
+        // parse error already printed to stderr (captured); exit non-zero
+        exit(1);
         
     } else {
         // parent process: read command output from pipe
@@ -538,13 +490,11 @@ int execute_and_capture(const char *command, char *output_buffer, size_t buffer_
         // close read end of pipe
         close(pipe_fd[0]);
         
-        // wait for child process to complete
+        // wait for child process to complete (we ignore exit status here;
+        // the captured output contains any error messages)
         int status;
         waitpid(pid, &status, 0);
-        
-        // free the command list
-        free_command_list(cmdlist);
-        
+
         return 0;
     }
 }
@@ -635,21 +585,9 @@ void* handle_client_thread(void* arg) {
         int exec_result = execute_and_capture(command_buffer, output_buffer, BUFFER_SIZE);
         
         if (exec_result == -1) {
-            // execution failed at system level
-            snprintf(output_buffer, BUFFER_SIZE, "Command not found: %s\n", command_buffer);
-            snprintf(log_buffer, sizeof(log_buffer),
-                    "[Client #%d - %s:%d] Command not found: \"%s\"",
-                    client_num, client_ip, client_port, command_buffer);
-            log_message(COLOR_ERROR, "ERROR", log_buffer);
-        } else {
-            // check if command produced any output
-            if (strlen(output_buffer) == 0) {
-                snprintf(output_buffer, BUFFER_SIZE, "Command not found: %s\n", command_buffer);
-                snprintf(log_buffer, sizeof(log_buffer),
-                        "[Client #%d - %s:%d] Command not found: \"%s\"",
-                        client_num, client_ip, client_port, command_buffer);
-                log_message(COLOR_ERROR, "ERROR", log_buffer);
-            }
+            // execution failed at system level (e.g., pipe/fork)
+            snprintf(output_buffer, BUFFER_SIZE, "Server error: Failed to execute command\n");
+            log_message(COLOR_ERROR, "ERROR", "System failure during command execution.");
         }
         
         // log that we're sending output back to client
@@ -667,6 +605,13 @@ void* handle_client_thread(void* arg) {
         printf("\n"); // blank line for readability
         fflush(stdout);
         pthread_mutex_unlock(&log_mutex);
+        
+        // if the command produced no output at all, send a newline so the client
+        // does not block waiting (keeps UX consistent with a local shell prompt return)
+        if (output_buffer[0] == '\0') {
+            output_buffer[0] = '\n';
+            output_buffer[1] = '\0';
+        }
         
         // send the output back to the client
         ssize_t bytes_sent = send(client_socket, output_buffer, strlen(output_buffer), 0);
