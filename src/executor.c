@@ -11,9 +11,9 @@ void execute_commands(CommandList *cmdlist) {
     if (!cmdlist) return;
 
     int num_cmds = cmdlist->count;
-    int pipefd[2*num_cmds]; // max pipes needed
+    int pipefd[2*num_cmds]; //max pipes needed
 
-    // Create pipes
+    //create pipes
     for (int i = 0; i < num_cmds - 1; i++) {
         if (pipe(pipefd + i*2) < 0) {
             perror("pipe");
@@ -30,7 +30,7 @@ void execute_commands(CommandList *cmdlist) {
 
         pid_t pid = fork();
         if (pid == 0) { // child
-            // Input redirection
+            //input redirection
             if (cmd.input_file) {
                 int fd = open(cmd.input_file, O_RDONLY);
                 if (fd < 0) { perror(cmd.input_file); exit(1); }
@@ -38,7 +38,7 @@ void execute_commands(CommandList *cmdlist) {
                 close(fd);
             }
 
-            // Output redirection
+            //output redirection
             if (cmd.output_file) {
                 int fd = open(cmd.output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd < 0) { perror(cmd.output_file); exit(1); }
@@ -46,7 +46,7 @@ void execute_commands(CommandList *cmdlist) {
                 close(fd);
             }
 
-            // Error redirection
+            //error redirection
             if (cmd.error_file) {
                 int fd = open(cmd.error_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 if (fd < 0) { perror(cmd.error_file); exit(1); }
@@ -54,15 +54,15 @@ void execute_commands(CommandList *cmdlist) {
                 close(fd);
             }
 
-            // Set up pipes
-            if (i != 0) { // not first command
+            //set up pipes
+            if (i != 0) { //not first command
                 dup2(pipefd[(i-1)*2], STDIN_FILENO);
             }
-            if (i != num_cmds - 1) { // not last command
+            if (i != num_cmds - 1) { //not last command
                 dup2(pipefd[i*2 + 1], STDOUT_FILENO);
             }
 
-            // Close all pipe fds
+            //close all pipe fds
             for (int j = 0; j < 2*(num_cmds-1); j++)
                 close(pipefd[j]);
 
@@ -75,11 +75,11 @@ void execute_commands(CommandList *cmdlist) {
         }
     }
 
-    // Close all pipes in parent
+    //close all pipes in parent
     for (int i = 0; i < 2*(num_cmds-1); i++)
         close(pipefd[i]);
 
-    // Wait for all children
+    //wait for all children
     for (int i = 0; i < num_cmds; i++)
         wait(NULL);
 }
