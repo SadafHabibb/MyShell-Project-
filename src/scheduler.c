@@ -27,13 +27,13 @@ static pthread_mutex_t task_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 // ANSI COLOR CODES
 // ============================================================================
 
-#define COLOR_CYAN "\033[36m"      // cyan for created
-#define COLOR_GREEN "\033[32m"     // green for started
-#define COLOR_YELLOW "\033[33m"    // yellow for waiting
-#define COLOR_MAGENTA "\033[35m"   // magenta for running
-#define COLOR_RED "\033[31m"       // red for ended
-#define COLOR_BLUE "\033[36m"      // blue for schedule summary
-#define COLOR_RESET "\033[0m"      // reset color
+#define COLOR_CYAN    "\033[1;36m"    // Bold Cyan for created
+#define COLOR_GREEN   "\033[1;32m"    // Bold Green for started
+#define COLOR_YELLOW  "\033[1;33m"    // Bold Yellow for waiting
+#define COLOR_MAGENTA "\033[1;35m"    // Bold Magenta for running
+#define COLOR_RED     "\033[1;31m"    // Bold Red for ended
+#define COLOR_BLUE    "\033[1;37;46m" 
+#define COLOR_RESET   "\033[0m"       // Reset color
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -166,7 +166,7 @@ int add_task_to_queue(Task* task) {
         return -1;
     }
     
-    // Only reset start time if Queue is empty AND Summary is empty AND NO task is running.
+    // Reset start time only if system is completely idle
     pthread_mutex_lock(&scheduler_mutex);
     if (waiting_queue.count == 0 && schedule_summary.count == 0 && currently_running_task_id == -1) {
         gettimeofday(&schedule_summary.start_time, NULL);
@@ -453,7 +453,6 @@ int execute_task(Task* task) {
         task->state = TASK_ENDED;
         log_task_state(task, "ended");
         
-        // Add to summary when completed (if not shell)
         if (task->type != TASK_TYPE_SHELL) {
             add_schedule_entry(task->task_id);
         }
@@ -484,8 +483,6 @@ int execute_task(Task* task) {
         task->state = TASK_WAITING;
         log_task_state(task, "waiting");
         
-        // FIX: Add to summary whenever a task stops/yields/waits
-        // This creates the "P1-(3)-P1-(10)..." style output required
         if (task->type != TASK_TYPE_SHELL) {
             add_schedule_entry(task->task_id);
         }
